@@ -8,10 +8,8 @@ A customer support chatbot for a food delivery app, built with HTML, CSS and Jav
 - Works in English, Hindi and Bengali (including typed Hinglish)
 
 ## Live demo
-https://akumari408.github.io/zomato-support-chatbot/
-
+https://github.com/akumari408/-zomato-support-chatbot
 ## Built by
-YOUR NAME
-
+Deepak
 ## Note
 This is a demo project using sample order data. It is not affiliated with Zomato.
