@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Zomato Support</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f6f3f1; margin: 0;
+           display: flex; justify-content: center; }
+    .app { width: 100%; max-width: 420px; height: 100vh; background: white;
+           display: flex; flex-direction: column; }
+    h1 { background: #cb202d; color: white; margin: 0; padding: 16px;
+         font-size: 18px; }
+    h1 small { font-size: 12px; font-weight: normal; opacity: 0.8; margin-left: 6px; }
+    #log { flex: 1; overflow-y: auto; padding: 16px; display: flex;
+           flex-direction: column; gap: 10px; }
+    .msg { max-width: 80%; padding: 10px 14px; border-radius: 14px; font-size: 15px; }
+    .bot { background: #f1ece9; align-self: flex-start; }
+    .me  { background: #cb202d; color: white; align-self: flex-end; }
+    #chat-form { display: flex; gap: 8px; padding: 12px; border-top: 1px solid #ddd; }
+    #user-input { flex: 1; padding: 10px 14px; border: 1px solid #ccc;
+                  border-radius: 999px; font-size: 15px; }
+    button { background: #cb202d; color: white; border: 0; padding: 0 18px;
+             border-radius: 999px; cursor: pointer; font-size: 15px; }
+
+    .langs { display: flex; gap: 8px; padding: 8px 16px; border-bottom: 1px solid #eee; }
+    .lang { background: white; color: #cb202d; border: 1px solid #cb202d;
+            padding: 5px 12px; font-size: 13px; }
+    .lang.active { background: #cb202d; color: white; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 8px; align-self: flex-start; }
+    .chip { background: white; color: #cb202d; border: 1px solid #cb202d;
+            padding: 7px 12px; border-radius: 999px; font-size: 14px; cursor: pointer; }
+    .chip:hover { background: #fbe9ea; }
+    .card { align-self: flex-start; width: 80%; border: 1px solid #ddd;
+            border-radius: 12px; padding: 12px; font-size: 14px; }
+    .card b { display: block; margin-bottom: 6px; }
+    .row { display: flex; justify-content: space-between; padding: 3px 0; color: #666; }
+    .row span:last-child { color: #000; text-align: right; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Zomato Support <small> by Deepak Kumar Tiwari</small></h1>
+    <div class="langs">
+      <button class="lang" data-lang="en" type="button">English</button>
+      <button class="lang" data-lang="hi" type="button">हिन्दी</button>
+      <button class="lang" data-lang="bn" type="button">বাংলা</button>
+    </div>
+    <div id="log"></div>
+    <form id="chat-form">
+      <input id="user-input" type="text">
+      <button id="send-btn" type="submit"></button>
+    </form>
+  </div>
+
+  <script>
+    var log = document.getElementById("log");
+    var form = document.getElementById("chat-form");
+    var input = document.getElementById("user-input");
+    var sendBtn = document.getElementById("send-btn");
+    var lang = "en";   // current language: "en", "hi" or "bn"
+
+    // Text used by the screen itself, in each language
+    var UI = {
+      en: { greet: "Hi! I'm Zomato's support assistant. How can I help you?",
+            placeholder: "Type your issue...", send: "Send",
+            fallback: "Sorry, I didn't understand that. Please pick one of these options." },
+      hi: { greet: "नमस्ते! मैं Zomato का सपोर्ट असिस्टेंट हूँ। मैं आपकी कैसे मदद कर सकता हूँ?",
+            placeholder: "अपनी समस्या लिखें...", send: "भेजें",
+            fallback: "माफ़ कीजिए, मैं समझ नहीं पाया। कृपया इनमें से कोई विकल्प चुनें।" },
+      bn: { greet: "নমস্কার! আমি Zomato-র সাপোর্ট অ্যাসিস্ট্যান্ট। আমি কীভাবে সাহায্য করতে পারি?",
+            placeholder: "আপনার সমস্যা লিখুন...", send: "পাঠান",
+            fallback: "দুঃখিত, বুঝতে পারিনি। অনুগ্রহ করে নিচের একটি অপশন বেছে নিন।" }
+    };
+
+    var MAIN = ["track", "refund", "cancel", "missing", "payment", "agent"];
+
+    // Each intent: id, keywords (all languages), title (button label),
+    // reply, optional card, and follow-up chips (list of intent ids)
+    var intents = [
+      {
+        id: "menu",
+        keywords: ["main menu", "menu", "मुख्य मेनू", "মূল মেনু"],
+        title: { en: "Main menu", hi: "मुख्य मेनू", bn: "মূল মেনু" },
+        reply: { en: "What can I help you with?",
+                 hi: "मैं आपकी क्या मदद कर सकता हूँ?",
+                 bn: "আমি আপনাকে কীভাবে সাহায্য করতে পারি?" },
+        chips: MAIN
+      },
+      {
+        id: "track",
+        keywords: ["track", "where is", "late", "delay", "eta", "kahan", "kab aayega",
+                   "ट्रैक", "कहाँ", "कहां", "देरी", "ट्र्যাক", "ট্র্যাক", "কোথায়", "দেরি"],
+        title: { en: "Track my order", hi: "मेरा ऑर्डर ट्रैक करें", bn: "আমার অর্ডার ট্র্যাক করুন" },
+        reply: { en: "Here is your live order status.",
+                 hi: "यह आपके ऑर्डर की लाइव स्थिति है।",
+                 bn: "এটি আপনার অর্ডারের লাইভ স্ট্যাটাস।" },
+        card: {
+          title: { en: "Order #ZM48213907", hi: "ऑर्डर #ZM48213907", bn: "অর্ডার #ZM48213907" },
+          rows: {
+            en: [["Restaurant", "Biryani Blues"], ["Status", "Out for delivery"],
+                 ["Arriving in", "12 mins"], ["Delivery partner", "Rakesh"]],
+            hi: [["रेस्टोरेंट", "Biryani Blues"], ["स्थिति", "डिलीवरी के लिए निकल चुका है"],
+                 ["पहुँचने में", "12 मिनट"], ["डिलीवरी पार्टनर", "Rakesh"]],
+            bn: [["রেস্টুরেন্ট", "Biryani Blues"], ["স্ট্যাটাস", "ডেলিভারির জন্য বেরিয়েছে"],
+                 ["পৌঁছাতে", "১২ মিনিট"], ["ডেলিভারি পার্টনার", "Rakesh"]]
+          }
+        },
+        chips: ["agent", "menu"]
+      },
+      {
+        id: "refund",
+        keywords: ["refund", "money back", "paisa wapas", "paise wapas",
+                   "रिफंड", "पैसा वापस", "पैसे वापस", "রিফান্ড", "টাকা ফেরত"],
+        title: { en: "Refund status", hi: "रिफंड की स्थिति", bn: "রিফান্ডের স্ট্যাটাস" },
+        reply: { en: "Here is your refund status. UPI refunds usually take 3 to 5 working days.",
+                 hi: "यह आपके रिफंड की स्थिति है। UPI रिफंड में आमतौर पर 3 से 5 कार्य दिवस लगते हैं।",
+                 bn: "এটি আপনার রিফান্ডের স্ট্যাটাস। UPI রিফান্ডে সাধারণত ৩ থেকে ৫ কার্যদিবস লাগে।" },
+        card: {
+          title: { en: "Refund for #ZM48213907", hi: "#ZM48213907 का रिफंड", bn: "#ZM48213907 এর রিফান্ড" },
+          rows: {
+            en: [["Amount", "₹120"], ["Reason", "Missing item"],
+                 ["Refund to", "UPI"], ["Status", "Processing"]],
+            hi: [["राशि", "₹120"], ["कारण", "आइटम कम था"],
+                 ["रिफंड कहाँ", "UPI"], ["स्थिति", "प्रोसेस हो रहा है"]],
+            bn: [["পরিমাণ", "₹120"], ["কারণ", "আইটেম পাওয়া যায়নি"],
+                 ["রিফান্ড যাবে", "UPI"], ["স্ট্যাটাস", "প্রক্রিয়াধীন"]]
+          }
+        },
+        chips: ["agent", "menu"]
+      },
+      {
+        id: "cancel",
+        keywords: ["cancel", "कैंसिल", "रद्द", "বাতিল", "ক্যানসেল"],
+        title: { en: "Cancel my order", hi: "ऑर्डर कैंसिल करें", bn: "অর্ডার বাতিল করুন" },
+        reply: { en: "Your order is already out for delivery, so cancelling now may involve a charge. Would you like to talk to an agent?",
+                 hi: "आपका ऑर्डर डिलीवरी के लिए निकल चुका है, इसलिए अभी कैंसिल करने पर शुल्क लग सकता है। क्या आप एजेंट से बात करना चाहेंगे?",
+                 bn: "আপনার অর্ডার ডেলিভারির জন্য বেরিয়ে গেছে, তাই এখন বাতিল করলে চার্জ লাগতে পারে। আপনি কি এজেন্টের সঙ্গে কথা বলতে চান?" },
+        chips: ["agent", "track", "menu"]
+      },
+      {
+        id: "missing",
+        keywords: ["missing", "wrong item", "spilled", "damaged", "galat",
+                   "गलत", "गायब", "खराब", "ভুল", "পাওয়া যায়নি", "নষ্ট"],
+        title: { en: "Item missing or wrong", hi: "आइटम कम या गलत", bn: "আইটেম কম বা ভুল" },
+        reply: { en: "Sorry about that. Please share a photo of the item in the app under Order > Help, and we will refund or replace it.",
+                 hi: "माफ़ कीजिए। कृपया ऐप में Order > Help में आइटम की फ़ोटो भेजें, हम रिफंड या रिप्लेसमेंट देंगे।",
+                 bn: "দুঃখিত। অনুগ্রহ করে অ্যাপের Order > Help-এ আইটেমের ছবি পাঠান, আমরা রিফান্ড বা রিপ্লেসমেন্ট দেব।" },
+        chips: ["refund", "agent", "menu"]
+      },
+      {
+        id: "payment",
+        keywords: ["payment", "deducted", "charged", "paise kat", "पेमेंट", "पैसे कट",
+                   "পেমেন্ট", "টাকা কেটে", "কেটে গেছে"],
+        title: { en: "Payment problem", hi: "पेमेंट की समस्या", bn: "পেমেন্ট সমস্যা" },
+        reply: { en: "If money was deducted but your order failed, it is refunded automatically within 5 to 7 working days.",
+                 hi: "अगर पैसे कट गए लेकिन ऑर्डर नहीं हुआ, तो 5 से 7 कार्य दिवस में अपने आप रिफंड हो जाता है।",
+                 bn: "টাকা কেটে গেলেও অর্ডার না হলে ৫ থেকে ৭ কার্যদিবসের মধ্যে নিজে থেকেই রিফান্ড হয়ে যায়।" },
+        chips: ["refund", "agent", "menu"]
+      },
+      {
+        id: "agent",
+        keywords: ["agent", "human", "complaint", "एजेंट", "शिकायत", "এজেন্ট", "অভিযোগ"],
+        title: { en: "Talk to an agent", hi: "एजेंट से बात करें", bn: "এজেন্টের সঙ্গে কথা বলুন" },
+        reply: { en: "Connecting you to a support executive. Your wait time is about 3 minutes.",
+                 hi: "आपको सपोर्ट एग्जीक्यूटिव से जोड़ रहे हैं। प्रतीक्षा समय लगभग 3 मिनट है।",
+                 bn: "আপনাকে সাপোর্ট এক্সিকিউটিভের সঙ্গে যুক্ত করছি। অপেক্ষার সময় প্রায় ৩ মিনিট।" },
+        chips: ["menu"]
+      },
+      {
+        id: "hello",
+        keywords: ["hi", "hello", "hey", "namaste", "नमस्ते", "হ্যালো", "নমস্কার"],
+        title: { en: "Hello", hi: "नमस्ते", bn: "নমস্কার" },
+        reply: { en: "Hello! What can I help you with?",
+                 hi: "नमस्ते! मैं आपकी क्या मदद कर सकता हूँ?",
+                 bn: "নমস্কার! আমি আপনাকে কীভাবে সাহায্য করতে পারি?" },
+        chips: MAIN
+      }
+    ];
+
+    function findById(id) {
+      for (var i = 0; i < intents.length; i++) {
+        if (intents[i].id === id) return intents[i];
+      }
+      return null;
+    }
+
+    // Find the intent whose keyword appears in the message (any language).
+    // Very short keywords like "hi" must match a whole word.
+    function matchIntent(text) {
+      text = text.toLowerCase();
+      var words = text.split(/\s+/);
+      for (var i = 0; i < intents.length; i++) {
+        for (var j = 0; j < intents[i].keywords.length; j++) {
+          var kw = intents[i].keywords[j];
+          var found = kw.length <= 3 ? words.indexOf(kw) !== -1 : text.indexOf(kw) !== -1;
+          if (found) return intents[i].id;
+        }
+      }
+      return "fallback";
+    }
+
+    function add(type, text) {
+      var div = document.createElement("div");
+      div.className = "msg " + type;
+      div.textContent = text;
+      log.appendChild(div);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    function addCard(title, rows) {
+      var div = document.createElement("div");
+      div.className = "card";
+      var t = document.createElement("b");
+      t.textContent = title;
+      div.appendChild(t);
+      rows.forEach(function (r) {
+        var row = document.createElement("div");
+        row.className = "row";
+        var a = document.createElement("span");
+        var b = document.createElement("span");
+        a.textContent = r[0];
+        b.textContent = r[1];
+        row.appendChild(a);
+        row.appendChild(b);
+        div.appendChild(row);
+      });
+      log.appendChild(div);
+    }
+
+    function clearChips() {
+      document.querySelectorAll(".chips").forEach(function (c) { c.remove(); });
+    }
+
+    // idList is a list of intent ids; the label is shown in the current language
+    function addChips(idList) {
+      var wrap = document.createElement("div");
+      wrap.className = "chips";
+      idList.forEach(function (id) {
+        var label = findById(id).title[lang];
+        var btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "chip";
+        btn.textContent = label;
+        btn.onclick = function () { respond(id, label); };
+        wrap.appendChild(btn);
+      });
+      log.appendChild(wrap);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Show the user's message, then the bot's reply in the current language
+    function respond(id, userText) {
+      clearChips();
+      add("me", userText);
+      var intent = findById(id);
+      setTimeout(function () {
+        if (!intent) {
+          add("bot", UI[lang].fallback);
+          addChips(MAIN);
+          return;
+        }
+        add("bot", intent.reply[lang]);
+        if (intent.card) addCard(intent.card.title[lang], intent.card.rows[lang]);
+        addChips(intent.chips);
+        log.scrollTop = log.scrollHeight;
+      }, 500);
+    }
+
+    function setLang(l) {
+      lang = l;
+      document.documentElement.lang = l;
+      document.querySelectorAll(".lang").forEach(function (b) {
+        b.classList.toggle("active", b.getAttribute("data-lang") === l);
+      });
+      input.placeholder = UI[l].placeholder;
+      sendBtn.textContent = UI[l].send;
+      clearChips();
+      add("bot", UI[l].greet);
+      addChips(MAIN);
+    }
+
+    document.querySelectorAll(".lang").forEach(function (b) {
+      b.addEventListener("click", function () { setLang(b.getAttribute("data-lang")); });
+    });
+
+    form.addEventListener("submit", function (e) {
+      e.preventDefault();
+      var text = input.value.trim();
+      if (text === "") return;
+      respond(matchIntent(text), text);
+      input.value = "";
+    });
+
+    setLang("en");
+  </script>
+</body>
+</html>
